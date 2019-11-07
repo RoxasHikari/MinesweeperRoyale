@@ -8,7 +8,7 @@
     float:left;
     background-color: beige;
     border-color: darkorchid;
-    border-style: groove;;
+    border-style: groove;
     text-align: center;
 }
 #chat {
@@ -26,5 +26,6 @@
     margin: 0 auto;
     background-color:grey;
     border-style: groove;
+    border-color: black;
     text-align: center;
 }
