@@ -7,16 +7,24 @@
     height:100%;
     float:left;
     background-color: beige;
+    border-color: darkorchid;
+    border-style: groove;;
+    text-align: center;
 }
 #chat {
     width:20%;
     height:100%;
     float:right;
     background-color: beige;
+    border-color: darkorchid;
+    border-style: groove;
+    text-align: center;
 }
 #gameSpace{
     width:60%;
     height:100%;
     margin: 0 auto;
     background-color:grey;
+    border-style: groove;
+    text-align: center;
 }
