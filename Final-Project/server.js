@@ -44,6 +44,10 @@ function createEmptyBoard(size){
         }
     }
 }
+server.use("/test", function(req, res){
+    res.write("Test");
+    res.end();
+});
 
 server.use(express.static("./pub"));
 server.listen(80, function(){
