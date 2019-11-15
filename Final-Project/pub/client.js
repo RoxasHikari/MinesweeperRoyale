@@ -1,9 +1,15 @@
+var io = require('socket.io');
+var socket = io();
+
+
+
 var vm = new Vue({
     el: "#app",
     data: {
-        chatLog: "",
+        chatLog: [],
         playerList: [],
         currentPlayer: "",
+        gameBoard: []
     },
     methods: {
     },

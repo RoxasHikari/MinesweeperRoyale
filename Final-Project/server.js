@@ -1,7 +1,10 @@
-var express = require("express");
+var express = require('express');
 var server = express();
-bodyParser = require("body-parser");
+var bodyParser = require("body-parser");
 server.use(bodyParser.urlencoded({extended: true}));
+var http = require('http').createServer(server);
+var io = require("socket.io")(http);
+//---------------------------------------------
 
 var percentageBombs = .2;
 var board = null;
@@ -34,22 +37,26 @@ function placeRandomBomb(size){
 
 function createEmptyBoard(size){
     board = new Array(size);
+    displayedBoard = new Array(size);
     for(let i=0;i<size;i++){
         board[i] = new Array(size);
+        displayedBoard[i] = new Array(size);
     }
     //initialize all to 0
     for(let i=0;i<size;i++){
         for(let j=0;j<size;j++){
             board[i][j] = 0;
+            displayedBoard[i][j] = 0;
         }
     }
 }
-server.use("/test", function(req, res){
-    res.write("Test");
-    res.end();
-});
+
+
+io.on('connection', function(socket){
+    console.log('new connection');
+})
 
 server.use(express.static("./pub"));
-server.listen(80, function(){
-    console.log("Server is now running on port 80.");
-})
+http.listen(80, function(){
+    console.log('listening on port 80');
+});
