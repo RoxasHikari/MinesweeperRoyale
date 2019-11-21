@@ -6,14 +6,60 @@ var socketio = require("socket.io");
 var io = socketio(server);
 app.use(express.static("pub"));
 //---------------------------------------------
+//TODO: add/remove users on connect/disconnect
+//TODO: implement limboard
+//TODO: finish click handling
 //user-related variables
 var usernameList = new Object();
 var guestNumber = 1;
 
 //board variables
 var percentageBombs = .2;
-var board = null;
-var displayedBoard = null;
+var board = null; //0 is empty space, 1 is bomb
+var limboard = null; //serves as intermediary, tracks num of bombs around each square.
+var displayedBoard = null; // 0 is empty space, 1 is bomb, 2 is clicked bomb, 3 is clicked empty space
+
+//game-state variables
+var userTakingTurn = null; //by socketID
+
+socket.on("updateBoard", function(xCD, yCD){
+    //if it is their turn, and they took a move
+    if(userTakingTurn == socket.id){
+
+    }
+    else{
+        //do nothing, dont tell them to update, it wasn't their turn.
+    }
+});
+
+function handleClickAt(xCD, yCD){
+    if(clickedBomb()){
+        board[xCD][yCD] == 2;
+        displayedBoard[xCD][yCD] == 2;
+    }
+    else{
+
+    }
+}
+
+function numBombAround(xCD, yCD){
+    var bombCount = 0;
+    if(isValidSpace && board[xCD-1][yCD-1] == 1) bombCount++;
+    if(isValidSpace && board[xCD][yCD-1] == 1) bombCount++;
+    if(isValidSpace && board[xCD+1][yCD-1] == 1) bombCount++;
+    if(isValidSpace && board[xCD-1][yCD] == 1) bombCount++;
+    if(isValidSpace && board[xCD+1][yCD] == 1) bombCount++;
+    if(isValidSpace && board[xCD-1][yCD+1] == 1) bombCount++;
+    if(isValidSpace && board[xCD][yCD+1] == 1) bombCount++;
+    if(isValidSpace && board[xCD+1][yCD+1] == 1) bombCount++;
+    return bombCount;
+}
+
+function isValidSpace(xCD, yCD){
+    if(xCD < 0|| yCD < 0) return false;
+    if(xCD >= board.length || yCD >= board.length) return false;
+    return true;
+}
 
 function addUsernameFrom(socketID, username){
     usernameList[socketID] = username;
@@ -73,9 +119,11 @@ function createEmptyBoard(size){
     }
 }
 
+
+
 io.on('connection', function(socket){
-    //add username to object    
     console.log("User Connected")
+    //add username to object
     socket.on('disconnect', function(){
         //remove username from object
         console.log("User Disconnected")
