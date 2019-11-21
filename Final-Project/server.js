@@ -6,9 +6,11 @@ var socketio = require("socket.io");
 var io = socketio(server);
 app.use(express.static("pub"));
 //---------------------------------------------
+
 //TODO: add/remove users on connect/disconnect
-//TODO: implement limboard
-//TODO: finish click handling
+//TODO: decide on spectator list vs spectator count (do they need a number if we arent listing them)
+//TODO: if they click a bomb, take them out of turn rotation/make them lose
+
 //user-related variables
 var usernameList = new Object();
 var guestNumber = 1;
@@ -16,13 +18,13 @@ var guestNumber = 1;
 //board variables
 var percentageBombs = .2;
 var board = null; //0 is empty space, 1 is bomb
-var limboard = null; //serves as intermediary, tracks num of bombs around each square.
-var displayedBoard = null; // 0 is empty space, 1 is bomb, 2 is clicked bomb, 3 is clicked empty space
+var limboard = null; //tracks num of bombs around each square. bomb square is -1
+var displayedBoard = null; // 0 is empty(unclicked) space, 1 is bomb(revealed), 2 is clicked empty space
 
 //game-state variables
 var userTakingTurn = null; //by socketID
 
-socket.on("updateBoard", function(xCD, yCD){
+io.on("updateBoard", function(xCD, yCD){
     //if it is their turn, and they took a move
     if(userTakingTurn == socket.id){
 
@@ -33,26 +35,77 @@ socket.on("updateBoard", function(xCD, yCD){
 });
 
 function handleClickAt(xCD, yCD){
-    if(clickedBomb()){
-        board[xCD][yCD] == 2;
-        displayedBoard[xCD][yCD] == 2;
+    if(isValidSpace(xCD, yCD)){
+        if(bombAt(xCD, yCD)){
+            bombClickHandler(xCD, yCD);
+        }
+        else{
+            safeClickHandler(xCD, yCD);
+        }
     }
-    else{
+}
 
+function bombClickHandler(xCD, yCD){
+    //if its not already displayed then display it
+    if(displayedBoard[xCD][yCD] == 0){
+        displayedBoard[xCD][yCD] == 1;
+        io.emit('updateBoardAt', xCD,yCD,limboard[xCD][yCD]);
     }
+    //TODO: make them lose
+}
+
+function safeClickHandler(xCD, yCD){
+    //if its not already displayed then display it
+    if(displayedBoard[xCD][yCD] == 0){
+        displayedBoard[xCD][yCD] = 2;
+        io.emit('updateBoardAt', xCd, yCD, limboard[xCD][yCD]);
+        handlerHelper(xCD, yCD);
+    }
+}
+function handlerHelper(xCD, yCD){
+        //if I have no bombs around me
+        if(limboard[xCD][yCD] == 0){
+            //if im not revealed, reveal me.
+            if(displayedBoard[xCD][yCD] == 0) displayedBoard[xCD][yCD] = 2;
+            //check others around me, call myself on them
+            handlerHelper(xCD-1, yCD-1);
+            handlerHelper(xCD, yCD-1);
+            handlerHelper(xCD+1, yCD-1);
+            handlerHelper(xCD-1, yCD);
+            handlerHelper(xCD+1, yCD);
+            handlerHelper(xCD-1, yCD+1);
+            handlerHelper(xCD, yCD+1);
+            handlerHelper(xCD+1, yCD+1);
+        }
+        //if im a square that has a bomb around me
+        else{
+            //reveal yourself, update client about you, and your value
+            displayedBoard[xCD][yCD] = 2;
+            io.emit('updateBoardAt', xCD, yCD, limboard[xCD][yCD]);
+        }
 }
 
 function numBombAround(xCD, yCD){
     var bombCount = 0;
-    if(isValidSpace && board[xCD-1][yCD-1] == 1) bombCount++;
-    if(isValidSpace && board[xCD][yCD-1] == 1) bombCount++;
-    if(isValidSpace && board[xCD+1][yCD-1] == 1) bombCount++;
-    if(isValidSpace && board[xCD-1][yCD] == 1) bombCount++;
-    if(isValidSpace && board[xCD+1][yCD] == 1) bombCount++;
-    if(isValidSpace && board[xCD-1][yCD+1] == 1) bombCount++;
-    if(isValidSpace && board[xCD][yCD+1] == 1) bombCount++;
-    if(isValidSpace && board[xCD+1][yCD+1] == 1) bombCount++;
+    //check if its a bomb space
+    if(isValidSpace(xCD,yCD) && bombAt(xCD, yCD)) return -1;
+    //check around space
+    if(isValidSpace(xCD,yCD) && board[xCD-1][yCD-1] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD][yCD-1] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD+1][yCD-1] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD-1][yCD] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD+1][yCD] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD-1][yCD+1] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD][yCD+1] == 1) bombCount++;
+    if(isValidSpace(xCD,yCD) && board[xCD+1][yCD+1] == 1) bombCount++;
     return bombCount;
+}
+
+function bombAt(xCD, yCD){
+    if(board[xCD][yCD] == 1){
+        return true;
+    }
+    return false;
 }
 
 function isValidSpace(xCD, yCD){
@@ -81,6 +134,15 @@ function getUserList(){
 function createAndSetBoard(size){
     createEmptyBoard(size);
     populateBoard(size);
+    generateLimbo(size);
+}
+
+function generateLimbo(size){
+    for(let i=0;i<size;i++){
+        for(let j=0;j<size;j++){
+            limboard[i][j] = numBombAround(i,j);
+        }
+    }
 }
 
 function populateBoard(size){
@@ -105,21 +167,22 @@ function placeRandomBomb(size){
 
 function createEmptyBoard(size){
     board = new Array(size);
+    limboard = new Array(size);
     displayedBoard = new Array(size);
     for(let i=0;i<size;i++){
         board[i] = new Array(size);
+        limboard[i] = new Array(size);
         displayedBoard[i] = new Array(size);
     }
     //initialize all to 0
     for(let i=0;i<size;i++){
         for(let j=0;j<size;j++){
             board[i][j] = 0;
+            limboard[i][j] = 0;
             displayedBoard[i][j] = 0;
         }
     }
 }
-
-
 
 io.on('connection', function(socket){
     console.log("User Connected")

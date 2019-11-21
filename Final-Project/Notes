@@ -1,1 +1,8 @@
 https://www.geeksforgeeks.org/cpp-implementation-minesweeper-game/
+
+//server sends messages to client:
+    updateBoard(xCD,yCD,value) - when client receives it, it should replace the space,
+                                    the space should reflect the value
+                                    (-1 is bomb, 0 is empty, 1-8 is surrounded by bomb(s))
+
+//client sends messages to server:
