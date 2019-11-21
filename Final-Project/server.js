@@ -8,12 +8,12 @@ app.use(express.static("pub"));
 //---------------------------------------------
 
 //TODO: add/remove users on connect/disconnect
-//TODO: decide on spectator list vs spectator count (do they need a number if we arent listing them)
+//TODO: spectator list
 //TODO: if they click a bomb, take them out of turn rotation/make them lose
 
 //user-related variables
 var usernameList = new Object();
-var guestNumber = 1;
+var numberOfSpectators = 0;
 
 //board variables
 var percentageBombs = .2;
@@ -22,17 +22,8 @@ var limboard = null; //tracks num of bombs around each square. bomb square is -1
 var displayedBoard = null; // 0 is empty(unclicked) space, 1 is bomb(revealed), 2 is clicked empty space
 
 //game-state variables
+var turnOrderOfUsers = []; //array that stores currently playing players.
 var userTakingTurn = null; //by socketID
-
-io.on("updateBoard", function(xCD, yCD){
-    //if it is their turn, and they took a move
-    if(userTakingTurn == socket.id){
-
-    }
-    else{
-        //do nothing, dont tell them to update, it wasn't their turn.
-    }
-});
 
 function handleClickAt(xCD, yCD){
     if(isValidSpace(xCD, yCD)){
@@ -187,6 +178,16 @@ function createEmptyBoard(size){
 io.on('connection', function(socket){
     console.log("User Connected")
     //add username to object
+
+    socket.on("updateBoard", function(xCD, yCD){
+        //if it is their turn,
+        if(userTakingTurn == socket.id){
+            
+        }
+        else{
+            console.log("Someone tried to make a move while not their turn.");
+        }
+    });
     socket.on('disconnect', function(){
         //remove username from object
         console.log("User Disconnected")
