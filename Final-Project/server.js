@@ -1,14 +1,36 @@
 var express = require('express');
-var server = express();
-var bodyParser = require("body-parser");
-server.use(bodyParser.urlencoded({extended: true}));
-var http = require('http').createServer(server);
-var io = require("socket.io")(http);
+var app = express();
+var http = require('http')
+var server = http.Server(app)
+var socketio = require("socket.io");
+var io = socketio(server);
+app.use(express.static("pub"));
 //---------------------------------------------
+//user-related variables
+var usernameList = new Object();
+var guestNumber = 1;
 
+//board variables
 var percentageBombs = .2;
 var board = null;
 var displayedBoard = null;
+
+function addUsernameFrom(socketID, username){
+    usernameList[socketID] = username;
+}
+
+function removeUsernameFrom(socketID){
+    usernameList[socketID] = null;
+}
+
+function getUserList(){
+    var users = [];
+    for(var i in usernameList){
+        if(usernameList[i] != null)
+            users.push(usernameList[i]);
+    }
+    return users;
+}
 
 function createAndSetBoard(size){
     createEmptyBoard(size);
@@ -51,12 +73,15 @@ function createEmptyBoard(size){
     }
 }
 
-
 io.on('connection', function(socket){
-    console.log('new connection');
+    //add username to object    
+    console.log("User Connected")
+    socket.on('disconnect', function(){
+        //remove username from object
+        console.log("User Disconnected")
+    });
 })
 
-server.use(express.static("./pub"));
-http.listen(80, function(){
+server.listen(80, function(){
     console.log('listening on port 80');
 });
