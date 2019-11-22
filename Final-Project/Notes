@@ -6,3 +6,6 @@ https://www.geeksforgeeks.org/cpp-implementation-minesweeper-game/
                                     (-1 is bomb, 0 is empty, 1-8 is surrounded by bomb(s))
 
 //client sends messages to server:
+    newClickAt(xCD,yCD) - when server receives it, it should handle the click at xCD, yCd
+                        - if not a valid click, the server gives no response, and no update
+

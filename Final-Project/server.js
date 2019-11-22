@@ -7,8 +7,9 @@ var io = socketio(server);
 app.use(express.static("pub"));
 //---------------------------------------------
 
-//TODO: add/remove users on connect/disconnect
 //TODO: spectator list
+//TODO: Create New User/LoginAs
+//TODO: If a user disconnects, remove them from spectators/playing
 //TODO: if they click a bomb, take them out of turn rotation/make them lose
 
 //user-related variables
@@ -48,16 +49,15 @@ function bombClickHandler(xCD, yCD){
 function safeClickHandler(xCD, yCD){
     //if its not already displayed then display it
     if(displayedBoard[xCD][yCD] == 0){
-        displayedBoard[xCD][yCD] = 2;
-        io.emit('updateBoardAt', xCd, yCD, limboard[xCD][yCD]);
         handlerHelper(xCD, yCD);
     }
 }
 function handlerHelper(xCD, yCD){
-        //if I have no bombs around me
-        if(limboard[xCD][yCD] == 0){
-            //if im not revealed, reveal me.
-            if(displayedBoard[xCD][yCD] == 0) displayedBoard[xCD][yCD] = 2;
+        //if I have no bombs around me and im not revealed
+        if(limboard[xCD][yCD] == 0 && displayedBoard[xCD][yCD] == 0){
+            //reveal me.
+            displayedBoard[xCD][yCD] = 2;
+            io.emit('updateBoardAt', xCD, yCD, limboard[xCD][yCD]);
             //check others around me, call myself on them
             handlerHelper(xCD-1, yCD-1);
             handlerHelper(xCD, yCD-1);
@@ -70,9 +70,11 @@ function handlerHelper(xCD, yCD){
         }
         //if im a square that has a bomb around me
         else{
-            //reveal yourself, update client about you, and your value
-            displayedBoard[xCD][yCD] = 2;
-            io.emit('updateBoardAt', xCD, yCD, limboard[xCD][yCD]);
+            //reveal yourself if not already revealed, update client about you, and your value
+            if(displayedBoard[xCD][yCD] == 0){
+                displayedBoard[xCD][yCD] = 2;
+                io.emit('updateBoardAt', xCD, yCD, limboard[xCD][yCD]);
+            }
         }
 }
 
@@ -177,20 +179,45 @@ function createEmptyBoard(size){
 
 io.on('connection', function(socket){
     console.log("User Connected")
-    //add username to object
+    //default them to guest
+    usernameList[socket.id] = "guest";
 
-    socket.on("updateBoard", function(xCD, yCD){
-        //if it is their turn,
-        if(userTakingTurn == socket.id){
-            
+    socket.on("loginAs", function(username, password, callbackFunctionOnClient){
+        //TODO: MongoDB lookup 
+        // check username is in DB, and hash of PW = hash stored in DB
+        if(){
+            //if true, change their username to the username
+        }
+        //else failed
+        else{
+            console.log("User failed to login as:" + username);
+            callbackFunctionOnClient(false);
+        }
+    });
+
+    socket.on("createUser", function(username, password, callbackFunctionOnClient){
+        //TODO: if username is not already in MongoDB
+        if(){
+            //add the username and hashed PW to the DB
         }
         else{
-            console.log("Someone tried to make a move while not their turn.");
+            callbackFunctionOnClient(false);
+        }
+    });
+
+    socket.on("newClickAt", function(xCD, yCD){
+        //if it is their turn,
+        if(userTakingTurn == socket.id){
+            handleClickAt(xCD, yCD);
+        }
+        else{
+            console.log(usernameList[socket.id] + " tried to make a move while not their turn.");
         }
     });
     socket.on('disconnect', function(){
         //remove username from object
         console.log("User Disconnected")
+        usernameList[socket.id] = null;
     });
 })
 
