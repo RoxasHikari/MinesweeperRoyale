@@ -1,3 +1,12 @@
+//mongoDB stuff
+var mongodb = require("mongodb");
+var MongoClient = mongodb.MongoClient;
+var ObjectID = mongodb.ObjectID;
+var client = new MongoClient("mongodb://localhost:27017", { useNewUrlParser: true, useUnifiedTopology: true });
+var db;
+
+
+//server stuff
 var express = require('express');
 var app = express();
 var http = require('http')
@@ -8,7 +17,6 @@ app.use(express.static("pub"));
 //---------------------------------------------
 
 //TODO: spectator list
-//TODO: Create New User/LoginAs
 //TODO: If a user disconnects, remove them from spectators/playing
 //TODO: if they click a bomb, take them out of turn rotation/make them lose
 
@@ -177,16 +185,50 @@ function createEmptyBoard(size){
     }
 }
 
+function validUserStrings(username, password) {
+	//nonemptyString
+		if (!(typeof username === "string" && username.length > 0)) {
+			return false;
+        }
+        if (!(typeof password === "string" && password.length > 0)) {
+			return false;
+        }
+	return true;
+}
+//returns true if username is in DB
+function usernameInDatabase(username){
+    if(db.collection("users").find({username: username})) return true;
+    return false;
+}
+//returns true if username/password is in database
+function userInDatabase(username, password){
+    var hashedPW = hash(password);
+    if(db.collection("users").find({username: username, password: hashedPW})) return true;
+    return false;
+}
+
+function doHTMLEscapeCharacters(message) {
+	message = message.replace(/&/g, "&amp;");
+	message = message.replace(/</g, "&lt;");
+	message = message.replace(/>/g, "&gt;");
+	message = message.replace(/\//g, "&#47;");
+	message = message.replace(/"/g, "&quot;");
+	message = message.replace(/'/g, "&#39;");
+	return message;
+}
+
 io.on('connection', function(socket){
     console.log("User Connected")
     //default them to guest
     usernameList[socket.id] = "guest";
 
     socket.on("loginAs", function(username, password, callbackFunctionOnClient){
-        //TODO: MongoDB lookup 
         // check username is in DB, and hash of PW = hash stored in DB
-        if(){
+        if(userInDatabase(username, password)){
             //if true, change their username to the username
+            usernameList[socket.id] = username;
+            //successfully logged in.
+            callbackFunctionOnClient(true);
         }
         //else failed
         else{
@@ -196,12 +238,32 @@ io.on('connection', function(socket){
     });
 
     socket.on("createUser", function(username, password, callbackFunctionOnClient){
-        //TODO: if username is not already in MongoDB
-        if(){
-            //add the username and hashed PW to the DB
+        if(validUserStrings(username, password)){
+            //if username is not already in MongoDB
+            if(usernameInDatabase(username)){
+                callbackFunctionOnClient(false);
+            }
+             //add the username and hashed PW to the DB
+            else{
+                hashedPW = hash(password);
+                db.collection("users").insertOne({username: username, password: hashedPW});
+                //successfully added to DB
+                callbackFunctionOnClient(true);
+            }
+           
         }
         else{
             callbackFunctionOnClient(false);
+        }
+    });
+
+    socket.on("sendMessage", function(messageFromClient){
+        if(usernameList[socket.id] == "guest"){
+            console.log("Guest user tried to send a message.")
+        }
+        else{
+            var escapedMessage = doHTMLEscapeCharacters(messageFromClient);
+            io.emit("newMessage", usernameList[socket.id] + ": " + messageToSend);
         }
     });
 
