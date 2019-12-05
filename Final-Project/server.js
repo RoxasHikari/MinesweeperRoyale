@@ -31,6 +31,8 @@ var displayedBoard = null; // 0 is empty(unclicked) space, 1 is bomb(revealed), 
 var userTakingTurn = null; //by socketID
 var turnArray = [];
 
+//TODO: Determine when the game is over (1 player left, board is fully revealed, etc)
+
 function setupNewGame(size){
     createAndSetBoard(size);
     setupTurnOrder();
