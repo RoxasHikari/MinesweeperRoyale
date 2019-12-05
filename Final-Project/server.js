@@ -16,13 +16,10 @@ var io = socketio(server);
 app.use(express.static("pub"));
 //---------------------------------------------
 
-//TODO: spectator list
-//TODO: If a user disconnects, remove them from spectators/playing
-//TODO: if they click a bomb, take them out of turn rotation/make them lose
-
 //user-related variables
-var usernameList = new Object();
-var numberOfSpectators = 0;
+var usernameList = []; //all people connected, both playing and spectating, by socketID
+var spectatorList = []; //by socketID
+var playingUsers = []; //by socketID
 
 //board variables
 var percentageBombs = .2;
@@ -31,8 +28,14 @@ var limboard = null; //tracks num of bombs around each square. bomb square is -1
 var displayedBoard = null; // 0 is empty(unclicked) space, 1 is bomb(revealed), 2 is clicked empty space
 
 //game-state variables
-var turnOrderOfUsers = []; //array that stores currently playing players.
 var userTakingTurn = null; //by socketID
+var turnArray = [];
+
+function setupNewGame(size){
+    createAndSetBoard(size);
+    setupTurnOrder();
+    userTakingTurn = turnArray[0];
+}
 
 function handleClickAt(xCD, yCD){
     if(isValidSpace(xCD, yCD)){
@@ -51,13 +54,17 @@ function bombClickHandler(xCD, yCD){
         displayedBoard[xCD][yCD] == 1;
         io.emit('updateBoardAt', xCD,yCD,limboard[xCD][yCD]);
     }
-    //TODO: make them lose
+    //tell everyone that x person lost
+    io.emit('playerLost', playingUsers[userTakingTurn]);
+    //remove them from game(turn rotation, move them to spectators)
+    removeFromGame(userTakingTurn);
 }
 
 function safeClickHandler(xCD, yCD){
     //if its not already displayed then display it
     if(displayedBoard[xCD][yCD] == 0){
         handlerHelper(xCD, yCD);
+        nextPlayerAfter();
     }
 }
 function handlerHelper(xCD, yCD){
@@ -115,27 +122,20 @@ function isValidSpace(xCD, yCD){
     return true;
 }
 
-function addUsernameFrom(socketID, username){
-    usernameList[socketID] = username;
-}
-
-function removeUsernameFrom(socketID){
-    usernameList[socketID] = null;
-}
-
-function getUserList(){
-    var users = [];
-    for(var i in usernameList){
-        if(usernameList[i] != null)
-            users.push(usernameList[i]);
-    }
-    return users;
-}
-
 function createAndSetBoard(size){
     createEmptyBoard(size);
     populateBoard(size);
     generateLimbo(size);
+}
+
+function setupTurnOrder(){
+    var count = 0;
+    for(var i in playingUsers){
+        if(playingUsers[i] != null){
+            turnArray[count] = i;
+            count++;
+        }
+    }
 }
 
 function generateLimbo(size){
@@ -185,6 +185,52 @@ function createEmptyBoard(size){
     }
 }
 
+function nextPlayerAfter(){
+    //increment turn, if at end of array, return to index 0
+    var temp = function(socketID){
+        return socketID == userTakingTurn;
+    }
+    var indexOfCurrentPlayer = turnArray.findIndex(temp);
+    if(turnArray[indexOfCurrentPlayer+1] != undefined){
+        userTakingTurn = turnArray[indexOfCurrentPlayer+1];
+    }
+    else{
+        userTakingTurn = turnArray[0];
+    }
+}
+
+function addUsernameFor(socketID, username){
+    usernameList[socketID] = username;
+    moveToSpectator(socketID);
+}
+
+function removeFromGame(socketID){
+    if(socketID == userTakingTurn){
+        nextPlayerAfter(socketID);
+    }
+    playingUsers[socketID] = null;
+    setupTurnOrder();
+}
+
+function moveToPlaying(socketID){
+    playingUsers[socketID] = usernameList[socketID];
+    spectatorList[socketID] = null;
+}
+
+function moveToSpectator(socketID){
+    spectatorList[socketID] = usernameList[socketID];
+    removeFromGame(socketID);
+}
+
+function getUsersFrom(list){
+    var users = [];
+    for(var i in list){
+        if(list[i] != null)
+            users.push(list[i]);
+    }
+    return users;
+}
+
 function validUserStrings(username, password) {
 	//nonemptyString
 		if (!(typeof username === "string" && username.length > 0)) {
@@ -202,10 +248,17 @@ function usernameInDatabase(username){
 }
 //returns true if username/password is in database
 function userInDatabase(username, password){
-    var hashedPW = hash(password);
+    var hashedPW = password.hashCode();
     if(db.collection("users").find({username: username, password: hashedPW})) return true;
     return false;
 }
+//http://cwestblog.com/2011/10/11/javascript-snippet-string-prototype-hashcode/
+String.prototype.hashCode = function() {
+    for(var ret = 0, i = 0, len = this.length; i < len; i++) {
+      ret = (31 * ret + this.charCodeAt(i)) << 0;
+    }
+    return ret;
+  };
 
 function doHTMLEscapeCharacters(message) {
 	message = message.replace(/&/g, "&amp;");
@@ -219,14 +272,15 @@ function doHTMLEscapeCharacters(message) {
 
 io.on('connection', function(socket){
     console.log("User Connected")
-    //default them to guest
+    //default them to guest and put them in spectator
     usernameList[socket.id] = "guest";
+    spectatorList[socket.id] = usernameList[socket.id];
 
     socket.on("loginAs", function(username, password, callbackFunctionOnClient){
         // check username is in DB, and hash of PW = hash stored in DB
         if(userInDatabase(username, password)){
             //if true, change their username to the username
-            usernameList[socket.id] = username;
+            addUsernameFor(socket.id, username);
             //successfully logged in.
             callbackFunctionOnClient(true);
         }
@@ -237,6 +291,26 @@ io.on('connection', function(socket){
         }
     });
 
+    socket.on("signOut", function(){
+        addUsernameFor(socket.id, "guest");
+        removeFromGame(socket.id);
+        io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
+    });
+
+    socket.on("newGame", function(){
+        setupNewGame(8);
+    })
+
+    socket.on("moveToPlaying", function(){
+        moveToPlaying(socket.id);
+        io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
+    })
+
+    socket.on("moveToSpectator", function(){
+        moveToSpectator(socket.id);
+        io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
+    })
+
     socket.on("createUser", function(username, password, callbackFunctionOnClient){
         if(validUserStrings(username, password)){
             //if username is not already in MongoDB
@@ -245,7 +319,7 @@ io.on('connection', function(socket){
             }
              //add the username and hashed PW to the DB
             else{
-                hashedPW = hash(password);
+                hashedPW = password.hashCode();
                 db.collection("users").insertOne({username: username, password: hashedPW});
                 //successfully added to DB
                 callbackFunctionOnClient(true);
@@ -278,8 +352,11 @@ io.on('connection', function(socket){
     });
     socket.on('disconnect', function(){
         //remove username from object
-        console.log("User Disconnected")
+        console.log("User Disconnected");
+        removeFromGame(socket.id);
         usernameList[socket.id] = null;
+        spectatorList[socket.id] = null;
+        io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
     });
 })
 
