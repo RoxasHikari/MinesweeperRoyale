@@ -4,8 +4,6 @@ var MongoClient = mongodb.MongoClient;
 var ObjectID = mongodb.ObjectID;
 var client = new MongoClient("mongodb://localhost:27017", { useNewUrlParser: true, useUnifiedTopology: true });
 var db;
-
-
 //server stuff
 var express = require('express');
 var app = express();
@@ -15,28 +13,43 @@ var socketio = require("socket.io");
 var io = socketio(server);
 app.use(express.static("pub"));
 //---------------------------------------------
-
 //user-related variables
 var usernameList = []; //all people connected, both playing and spectating, by socketID
 var spectatorList = []; //by socketID
 var playingUsers = []; //by socketID
-
 //board variables
 var percentageBombs = .2;
 var board = null; //0 is empty space, 1 is bomb
 var limboard = null; //tracks num of bombs around each square. bomb square is -1
 var displayedBoard = null; // 0 is empty(unclicked) space, 1 is bomb(revealed), 2 is clicked empty space
-
 //game-state variables
 var userTakingTurn = null; //by socketID
 var turnArray = [];
-
-//TODO: Determine when the game is over (1 player left, board is fully revealed, etc)
+var gameInProgress = false;
 
 function setupNewGame(size){
     createAndSetBoard(size);
     setupTurnOrder();
     userTakingTurn = turnArray[0];
+    gameInProgress = true;
+}
+
+function checkGameIsOver(){
+    //condition 1: only 1 player remains
+    if(turnArray.length == 1){
+        gameInProgress = false;
+        io.emit('gameOver', turnArray[0]+" Won the game!");
+        return true;
+    } 
+    //condition 2: every square is revealed
+    for(let i=0;i<board.length;i++){
+        for(let j=0;j<board.length;j++){
+            if(displayedBoard[i][j] == 0) return false;
+        }
+    }
+    gameInProgress = false;
+    io.emit('gameOver', "Draw - More than 1 player survived");
+    return true;
 }
 
 function handleClickAt(xCD, yCD){
@@ -47,6 +60,7 @@ function handleClickAt(xCD, yCD){
         else{
             safeClickHandler(xCD, yCD);
         }
+        checkGameIsOver();
     }
 }
 
@@ -211,12 +225,17 @@ function removeFromGame(socketID){
         nextPlayerAfter(socketID);
     }
     playingUsers[socketID] = null;
+    moveToSpectator(socketID);
     setupTurnOrder();
 }
 
 function moveToPlaying(socketID){
-    playingUsers[socketID] = usernameList[socketID];
-    spectatorList[socketID] = null;
+    if(!gameInProgress){
+        playingUsers[socketID] = usernameList[socketID];
+        spectatorList[socketID] = null;
+        return true;
+    }
+    return false;
 }
 
 function moveToSpectator(socketID){
@@ -285,6 +304,7 @@ io.on('connection', function(socket){
             addUsernameFor(socket.id, username);
             //successfully logged in.
             callbackFunctionOnClient(true);
+            io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
         }
         //else failed
         else{
@@ -304,8 +324,12 @@ io.on('connection', function(socket){
     })
 
     socket.on("moveToPlaying", function(){
-        moveToPlaying(socket.id);
-        io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
+        if(moveToPlaying(socket.id)){
+            io.emit("userChanges", getUsersFrom(playingUsers), getUsersFrom(spectatorList));
+        }
+        else{
+            socket.emit("failedToJoin", "Game in progress");
+        }
     })
 
     socket.on("moveToSpectator", function(){
